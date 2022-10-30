@@ -53,6 +53,41 @@ def find_router_for_ip(routers, ip):
 
     return None
 
+
+def get_neighbor_dist(routers, current_node, neighbor):
+
+    #Traverse down through the nested dictionaries to get to the specific neighbors ad value
+    curr_node_info = routers[current_node]
+    curr_node_connections = curr_node_info['connections']
+    curr_node_neighbor = curr_node_connections[neighbor]
+    neighbor_dist = curr_node_neighbor['ad']
+    return neighbor_dist
+
+def get_current_node(to_visit, distance):
+
+    #Get first value in the list for an initial value
+    current_node = next(iter(to_visit))
+    for node in to_visit:
+        if distance[node] < distance[current_node]:
+            current_node = node
+    to_visit.remove(current_node)
+    return current_node
+
+def get_return_path(src, dst, parent):
+    #Start at destination node
+    current_node = dst
+    path = []
+    while current_node != src:
+        #Add curent node and then update current node to it's parent
+        path.append(current_node)
+        current_node = parent[current_node]
+    #Finally add the source node 
+    path.append(src)
+
+    #Traversed backward so reverse the list
+    path.reverse()
+    return path
+
 def dijkstras_shortest_path(routers, src_ip, dest_ip):
     """
     This function takes a dictionary representing the network, a source
@@ -107,9 +142,11 @@ def dijkstras_shortest_path(routers, src_ip, dest_ip):
     for madness.
     """
 
+    #Grab the router within the 'routers' passed in that correspond to our src and dst ips
     src_router = find_router_for_ip(routers, src_ip)
     dst_router = find_router_for_ip(routers, dest_ip)
 
+    #If the two routers are on the same subnet, return an empty list
     if ips_same_subnet(src_router, dst_router, "/24"):
         return []
     
@@ -117,36 +154,35 @@ def dijkstras_shortest_path(routers, src_ip, dest_ip):
     distance = {}
     parent = {}
 
-    for vertex in routers:
-        parent[vertex] = None
-        distance[vertex] = math.inf
-        to_visit.add(vertex)
+    #Go through each node in our routers dict
+    for node in routers:
+        #Initialize their parents to none, distance to inf, and add them to our visit set
+        parent[node] = None
+        distance[node] = math.inf
+        to_visit.add(node)
 
+    #Our starting node, src_router, has a distance of 0
     distance[src_router] = 0
     while len(to_visit) != 0:
 
-        current_node = next(iter(to_visit))
-        for vertex in to_visit:
-            if distance[vertex] < distance[current_node]:
-                current_node = vertex
-        to_visit.remove(current_node)
+        #Grab the current node, that is the one with the shortest distance that's in to_visit
+        current_node = get_current_node(to_visit, distance)
 
-
+        #For each neighboring router of our current node, update the distance and parents for the shortest path
         for neighbor in routers[current_node]['connections']:
             if neighbor in to_visit:
-                dist = distance[current_node] + routers[current_node]['connections'][neighbor]['ad']
+
+                neighbor_dist = get_neighbor_dist(routers, current_node, neighbor)
+                dist = distance[current_node] + neighbor_dist
+
+                #If the dist of our current node to the neighbor is shorter than the neighbors current distance, update it
                 if dist < distance[neighbor]:
                     distance[neighbor] = dist
                     parent[neighbor] = current_node
+                
 
-    current_node = dst_router
-    path = []
-    while current_node != src_router:
-        path.append(current_node)
-        current_node = parent[current_node]
-    path.append(src_router)
-
-    path.reverse()
+    #Traverse the nodes backwards using the parent dictionary and construct a path of ips 
+    path = get_return_path(src_router, dst_router, parent)
     return path
 #------------------------------
 # DO NOT MODIFY BELOW THIS LINE
